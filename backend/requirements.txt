@@ -1,0 +1,21 @@
+# --- core API ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+
+# --- data + classic ML ---
+pandas==2.2.3
+numpy==1.26.4
+scikit-learn==1.5.2
+xgboost==2.1.3
+joblib==1.4.2
+
+# --- explainability ---
+shap==0.43.0          # pinned below 0.44: econml 0.15.x caps it
+
+# --- causal inference (Microsoft Research) ---
+econml==0.15.1
+dowhy==0.12
+
+# --- responsible AI (Microsoft) ---
+fairlearn==0.10.0
