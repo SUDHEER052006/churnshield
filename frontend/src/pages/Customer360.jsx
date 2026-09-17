@@ -8,15 +8,18 @@ import { api } from "../lib/api";
 import { Card, Kpi, Loading, Note, Quadrant } from "../components/ui";
 import { money, pct, pp } from "../lib/format";
 
-const WHATIF_FIELDS = [
-  { key: "Contract", label: "Contract", options: ["Month-to-month", "One year", "Two year"] },
-  {
-    key: "PaymentMethod", label: "Payment method",
-    options: ["Electronic check", "Mailed check", "Bank transfer (automatic)", "Credit card (automatic)"],
-  },
-  { key: "TechSupport", label: "Tech support", options: ["Yes", "No"] },
-  { key: "OnlineSecurity", label: "Online security", options: ["Yes", "No"] },
-];
+// Which controls the simulator shows is decided by the backend, from the
+// active dataset's real model features. The UI never hardcodes a dataset's
+// vocabulary, and a field the model never saw can't appear as a slider.
+
+/** The customer's current values for every editable field. */
+function baselineOf(d) {
+  const out = {};
+  for (const f of d.editable ?? []) {
+    if (d.profile[f.field] !== undefined) out[f.field] = d.profile[f.field];
+  }
+  return out;
+}
 
 export default function Customer360({ summary }) {
   const [params, setParams] = useSearchParams();
@@ -39,20 +42,14 @@ export default function Customer360({ summary }) {
     setSim(null);
     api.customer(id).then((d) => {
       setC(d);
-      setWhatif({
-        Contract: d.profile.Contract,
-        PaymentMethod: d.profile.PaymentMethod,
-        TechSupport: d.profile.TechSupport,
-        OnlineSecurity: d.profile.OnlineSecurity,
-        MonthlyCharges: d.profile.MonthlyCharges,
-      });
+      setWhatif(baselineOf(d));
     });
   }, [id]);
 
   useEffect(() => {
     if (!c || !Object.keys(whatif).length) return;
     const t = setTimeout(() => {
-      api.simulate({ customer_id: c.id, ...whatif }).then(setSim).catch(() => {});
+      api.simulate({ customer_id: c.id, changes: whatif }).then(setSim).catch(() => {});
     }, 200);
     return () => clearTimeout(t);
   }, [c, whatif]);
@@ -93,9 +90,7 @@ export default function Customer360({ summary }) {
         <Kpi
           label="Customer"
           value={<span className="text-[22px]">{c.id}</span>}
-          detail={`${c.profile.gender} · ${c.profile.SeniorCitizen ? "senior" : "non-senior"} · ${
-            c.profile.tenure
-          } months · ${money(c.profile.MonthlyCharges)}/mo`}
+          detail={`${Math.round(c.tenure)} months · ${money(c.monthly)}/mo`}
         />
         <Kpi
           label="Churn probability"
@@ -233,49 +228,40 @@ export default function Customer360({ summary }) {
       >
         <div className="grid gap-5 xl:grid-cols-[1fr_1.6fr]">
           <div className="flex flex-col gap-3.5">
-            {WHATIF_FIELDS.map((f) => (
-              <div key={f.key}>
-                <label className="eyebrow">{f.label}</label>
-                <select
-                  className="mt-1 w-full"
-                  value={whatif[f.key] ?? ""}
-                  onChange={(e) => setWhatif({ ...whatif, [f.key]: e.target.value })}
-                >
-                  {f.options.map((o) => (
-                    <option key={o}>{o}</option>
-                  ))}
-                  {whatif[f.key] && !f.options.includes(whatif[f.key]) && (
-                    <option>{whatif[f.key]}</option>
-                  )}
-                </select>
-              </div>
-            ))}
-            <div>
-              <label className="eyebrow">
-                Monthly charges — {money(whatif.MonthlyCharges ?? 0)}
-              </label>
-              <input
-                className="mt-2"
-                type="range"
-                min={18}
-                max={125}
-                step={1}
-                value={whatif.MonthlyCharges ?? 70}
-                onChange={(e) => setWhatif({ ...whatif, MonthlyCharges: Number(e.target.value) })}
-              />
-            </div>
-            <button
-              className="btn ghost self-start"
-              onClick={() =>
-                setWhatif({
-                  Contract: c.profile.Contract,
-                  PaymentMethod: c.profile.PaymentMethod,
-                  TechSupport: c.profile.TechSupport,
-                  OnlineSecurity: c.profile.OnlineSecurity,
-                  MonthlyCharges: c.profile.MonthlyCharges,
-                })
-              }
-            >
+            {(c.editable ?? []).map((f) =>
+              f.type === "choice" ? (
+                <div key={f.field}>
+                  <label className="eyebrow">{f.label}</label>
+                  <select
+                    className="mt-1 w-full"
+                    value={whatif[f.field] ?? ""}
+                    onChange={(e) => setWhatif({ ...whatif, [f.field]: e.target.value })}
+                  >
+                    {f.options.map((o) => (
+                      <option key={o}>{o}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div key={f.field}>
+                  <label className="eyebrow">
+                    {f.label} — {money(whatif[f.field] ?? 0)}
+                  </label>
+                  <input
+                    className="mt-2"
+                    type="range"
+                    min={Math.floor(f.min)}
+                    max={Math.ceil(f.max)}
+                    step={1}
+                    value={whatif[f.field] ?? f.min}
+                    onChange={(e) =>
+                      setWhatif({ ...whatif, [f.field]: Number(e.target.value) })
+                    }
+                  />
+                </div>
+              )
+            )}
+            <button className="btn ghost self-start" onClick={() => setWhatif(baselineOf(c))}>
               Reset to current
             </button>
           </div>
