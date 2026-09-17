@@ -114,21 +114,24 @@ def synth_cell2cell(n: int = 51_047, seed: int = C.RANDOM_STATE) -> pd.DataFrame
     z = z + dropped / 22 + blocked / 40 + care_calls / 5.5
     z = z - months / 34
     z = z + equip_days / 900
-    z = z + np.where(refurbished == "Yes", 0.22, 0.0)
-    z = z + np.where(web_capable == "Yes", -0.30, 0.0)
-    z = z + np.where(has_card == "Yes", -0.26, 0.0)
+    z = z + np.where(refurbished == "Yes", 0.14, 0.0)
+    z = z + np.where(web_capable == "Yes", -0.20, 0.0)
+    z = z + np.where(has_card == "Yes", -0.16, 0.0)
     z = z + np.where(df.NewCellphoneUser.values == "Yes", 0.18, 0.0)
     z = z + df.AdjustmentsToCreditRating.values * 0.12
     z = z - df.ReferralsMadeBySubscriber.values * 0.16
     z = z + reached_desk * 0.55                # asking about leaving predicts leaving
 
     treated_offer = accepted == 1
-    z = z + np.where(treated_offer, -0.95, 0.0)          # the offer works, on average
+    # Deliberately modest. An offer that moves everyone by 20 points makes
+    # every customer persuadable and the quadrant split degenerate -- real
+    # retention effects are single-digit percentage points for most people.
+    z = z + np.where(treated_offer, -0.42, 0.0)
 
     # ---- heterogeneity, including two genuine reversals ------------------
     # Lost causes: at the top of the price book people leave on price alone,
     # and every concession is cancelled out.
-    price_driven = revenue > 145
+    price_driven = revenue > 105
     z = z + np.where(price_driven, 1.25, 0.0)
     z = z + np.where(price_driven & treated_offer, 0.95, 0.0)
     z = z + np.where(price_driven & (web_capable == "Yes"), 0.30, 0.0)
@@ -137,7 +140,7 @@ def synth_cell2cell(n: int = 51_047, seed: int = C.RANDOM_STATE) -> pd.DataFrame
 
     # Sleeping dogs: long-tenure customers are not thinking about leaving.
     # Any intervention reminds them to shop around.
-    dormant = months > 40
+    dormant = months > 30
     z = z + np.where(dormant & treated_offer, 1.45, 0.0)
     z = z + np.where(dormant & (web_capable == "Yes"), 0.75, 0.0)
     z = z + np.where(dormant & (has_card == "Yes"), 0.70, 0.0)

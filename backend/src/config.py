@@ -26,6 +26,12 @@ for _d in (DATA_DIR, ARTIFACT_DIR, MODEL_DIR):
 RANDOM_STATE = 42
 TEST_SIZE = 0.20
 
+# Causal forests are fitted on at most this many rows, then used to predict an
+# effect for every customer. Fitting on 50k+ rows costs minutes per treatment
+# and buys almost nothing: the estimator is recovering subgroup structure, and
+# 20k rows already pins that down. Raise it for a final run if you like.
+CAUSAL_FIT_MAX_ROWS = 20_000
+
 DATASET = os.environ.get("CHURNSHIELD_DATASET", "cell2cell").strip().lower()
 
 

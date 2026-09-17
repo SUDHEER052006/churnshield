@@ -171,6 +171,16 @@ def _nuisance():
     )
 
 
+def _subsample(X, t, y, cap=None):
+    """Cap the FITTING set. Prediction still covers every customer."""
+    cap = cap or C.CAUSAL_FIT_MAX_ROWS
+    if len(y) <= cap:
+        return X, t, y
+    rng = np.random.default_rng(C.RANDOM_STATE)
+    idx = rng.choice(len(y), cap, replace=False)
+    return X[idx], t[idx], y[idx]
+
+
 def _fallback_tlearner(Xtr, ttr, ytr, Xall):
     """Used only when EconML is unavailable. Plain two-model T-learner."""
     m1 = RandomForestRegressor(n_estimators=300, min_samples_leaf=8,
@@ -198,6 +208,7 @@ def compare_learners(df: pd.DataFrame, key: str | None = None) -> list[dict]:
     X, t = X[mask], t[mask].values
     y = (1 - df.loc[mask, "churn"]).values.astype(float)     # retention
 
+    X, t, y = _subsample(X, t, y)
     Xtr, Xte, ttr, tte, ytr, yte = train_test_split(
         X, t, y, test_size=0.3, stratify=t, random_state=C.RANDOM_STATE)
 
@@ -291,12 +302,13 @@ def estimate_all_treatments(df: pd.DataFrame) -> dict:
                         "qini": 0.0}
             continue
 
+        Xs, ts, ys = _subsample(Xf, tf, yf)
         if HAS_ECONML:
             n = _nuisance()
             est = CausalForestDML(model_y=n["reg"](), model_t=n["clf"](),
-                                  discrete_treatment=True, n_estimators=400,
+                                  discrete_treatment=True, n_estimators=300,
                                   min_samples_leaf=8, random_state=C.RANDOM_STATE)
-            est.fit(yf, tf, X=Xf)
+            est.fit(ys, ts, X=Xs)
             eff = np.asarray(est.effect(X)).ravel()
             try:
                 lo, hi = est.effect_interval(X, alpha=0.10)
@@ -305,13 +317,13 @@ def estimate_all_treatments(df: pd.DataFrame) -> dict:
                 se = np.std(eff) * 0.6
                 lo, hi = eff - 1.645 * se, eff + 1.645 * se
             name = "CausalForestDML"
-            _, _, _, q = qini_curve(np.asarray(est.effect(Xf)).ravel(), tf, yf)
+            _, _, _, q = qini_curve(np.asarray(est.effect(Xs)).ravel(), ts, ys)
         else:
-            eff = _fallback_tlearner(Xf, tf, yf, X)
+            eff = _fallback_tlearner(Xs, ts, ys, X)
             se = np.std(eff) * 0.6
             lo, hi = eff - 1.645 * se, eff + 1.645 * se
             name = "T-Learner (sklearn fallback)"
-            _, _, _, q = qini_curve(_fallback_tlearner(Xf, tf, yf, Xf), tf, yf)
+            _, _, _, q = qini_curve(_fallback_tlearner(Xs, ts, ys, Xs), ts, ys)
 
         out[key] = {"effect": eff, "lo": lo, "hi": hi, "estimator": name, "qini": float(q)}
     return out
